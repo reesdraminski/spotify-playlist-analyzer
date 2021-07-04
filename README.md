@@ -1,4 +1,6 @@
 # playlist-analyzer
+Analyze a user's Spotify playlists.
+
 # Getting Started
 1. Clone this repository.
 2. Run `npm install`.
