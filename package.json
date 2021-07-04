@@ -4,13 +4,14 @@
   "description": "Get analytics about user-created playlists.",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node server.js"
   },
   "author": "Rees Draminski",
   "license": "MIT",
   "dependencies": {
     "envfile": "^6.14.0",
-    "readline-sync": "^1.4.10",
+    "express": "^4.17.1",
+    "localtunnel": "^2.0.1",
     "spotify-web-api-node": "^5.0.2"
   }
 }
