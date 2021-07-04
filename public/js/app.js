@@ -1,49 +1,172 @@
 const searchBtn = document.getElementById("searchBtn");
 const userSearchInput = document.getElementById("userSearch");
+const cardContainerEl = document.getElementById("card-container");
 
+const ATTRIBUTES = [
+    {
+        id: "name",
+        name: "Playlist Name",
+        type: "string"
+    },
+    {
+        id: "trackCount",
+        name: "Track Count",
+        type: "number"
+    },
+    {
+        id: "duration",
+        name: "Duration",
+        type: "string"
+    }
+];
+
+const grid = new gridjs.Grid({
+    columns: ATTRIBUTES,
+    data: [{}],
+    fixedHeader: true,
+    pagination: {
+        enabled: true,
+        limit: 50
+    },
+    resizable: true,
+    sort: true
+});
+
+/**
+ * Initialize the UI components of the app.
+ */
 (function initUI() {
+    // bind search action to search button click
     searchBtn.onclick = () => {
         fetch(`/user/${userSearchInput.value}`)
             .then(response => response.json())
-            .then(data => console.log(data));
+            .then(data => analyzeData(userSearchInput.value, data));
     }
 })();
 
 /**
+ * Create a Bootstrap card element.
+ * @param {string} title 
+ * @param {string} body 
+ */
+function addCard(title, body) {
+    // wrap the card in a column for grid rows
+    const col = createElement(cardContainerEl, "div", {
+        class: "col"
+    });
+
+    // create a card for the semester
+    const card = createElement(col, "div", { 
+        class: "card"
+    });
+
+    // create a card body to hold everything
+    const cardBody = createElement(card, "div", {
+        class: "card-body"
+    });
+
+    // create a card title that says the semester
+    createElement(cardBody, "h5", {
+        class: "card-title text-center",
+        text: title
+    });
+
+    // add the date the course was offered during that semester type
+    createElement(cardBody, "p", {
+        class: "mb-0 text-center",
+        innerHTML: body
+    });
+}
+
+/**
  * Analyze the user's playlist data.
  */
-async function analyzeData() {
-    // read the playlists data from file
-    // const playlists = JSON.parse(fs.readFileSync(`data/${USER_ID}.json`));
-    const playlists = [];
-
+async function analyzeData(userID, playlists) {
     // get total number of playlists
-    console.log(`# of Public Playlists: ${playlists.length}\n`);
+    addCard("# of Public Playlists", playlists.length);
 
     // get information about collaborative playlists
     const collaborative = playlists.filter(x => x.collaborative);
-    console.log(`# of Collaborative Playlists: ${collaborative.length}\n`);
+    addCard("# of Collaborative Playlists", collaborative.length);
 
-    // get information about the tracks per playlist
-    const trackCountBreakdown = playlists.reduce((accumulator, playlist) => {
-        const title = playlist.name;
-        const trackCount = playlist.tracks.total;
+    // get playlists that were not created by this user
+    const followed = playlists.filter(x => x.owner.id != userID);
+    addCard("# of Followed Playlists", followed.length);
 
-         // if the length is already in the accumulator, we can just push to the array
-         if (trackCount in accumulator)
-         {
-            accumulator[trackCount].push(title);
-         }
-         // if the length is not in the accumulator, we need to make a new array for that property
-         else
-         {
-            accumulator[trackCount] = [ title ];
-         }
+    // build a list of tracks, unique tracks, and unique artists
+    let trackCount = 0;
+    const tracks = [], uniqueTracks = [];
+    const artists = [];
+    playlists.forEach(playlist => {
+        playlist.tracks.list.forEach(obj => {
+            if (!uniqueTracks.find(x => x.id == obj.track.id)) 
+            {
+                uniqueTracks.push(obj.track);
+            }
 
-        return accumulator;
-    }, {});
+            obj.track.artists.forEach(x => {
+                if (!artists.includes(x.name))
+                {
+                    artists.push(x.name);
+                }
+            });
 
-    const trackCounts = Object.keys(trackCountBreakdown).map(x => parseInt(x, 10));
+            tracks.push(obj.track);
+        });
+    });
+
+    addCard("# of Tracks", tracks.length);
+    addCard("# of Unique Tracks", uniqueTracks.length);
+    addCard("# of Artists", artists.length);
+
+    // get information about the titles
+    const titleLengths = playlists
+        .map(x => x.name)
+        .map(x => {
+            // get the number of words in the title
+            return x.split(" ")
+                // filter out any extra spaces
+                .filter(x => ![""].includes(x))
+                // get the length of the filtered array
+                .length;
+        });
+    
+    // show the average number of tracks per playlist
+    addCard("Average Playlist Title Word Count", Math.round(mean(titleLengths)));
+
+    // show the average number of tracks per playlist
+    const trackCounts = playlists.map(x => x.tracks.total);
+    addCard("Average Playlist Track Count", Math.round(mean(trackCounts)));
+
+    // get the average playlist duration (skip the empty playlists)
+    const playlistDurations = playlists
+        .filter(x => x.tracks.total > 0)
+        .map(x => x.tracks.list.reduce((a, b) => a + b.track.duration_ms, 0) / 1000);
+
+    addCard("Average Playlist Duration", secondsToHms(mean(playlistDurations)));
+
+    // structure data to be shown in the table view
+    const data = playlists.map(playlist => {
+        const obj = {};
+
+        // get the name and track count
+        obj.name = playlist.name;
+        obj.trackCount = playlist.tracks.total;
+
+        // get the playlist duration in milliseconds
+        const ms = playlist.tracks.list.reduce((a, b) => a + b.track.duration_ms, 0);
+        obj.duration = secondsToHms(ms / 1000);
+
+        return obj;
+    });
+
+    // render the table view with our newly created data
+    grid.updateConfig({ data: data });
+    grid.render(document.getElementById("wrapper"));
+
+    return;
+
+    // const trackCounts = Object.keys(trackCountBreakdown).map(x => parseInt(x, 10));
     const [ q1, q2, q3 ] = quartiles(trackCounts); 
     console.log("Quartiles and Outliers by Track Count:");
     console.log(`First Quartile = ${q1} tracks`);
@@ -59,33 +182,23 @@ async function analyzeData() {
     
     console.log("Playlists by # of Tracks");
     console.log(trackCountBreakdown);
+}
 
-    // get information about the titles
-    const titles = playlists.map(x => x.name);
-    const titleLengths = titles.reduce((accumulator, title) => {
-        // get the number of words in the title
-        const titleLength = title.split(" ")
-            // filter out any extra spaces
-            .filter(x => ![""].includes(x))
-            // get the length of the filtered array
-            .length;
+/**
+ * Convert seconds into a HH:MM:SS string.
+ * @param {number} d 
+ * @returns {string} hmsString
+ */
+function secondsToHms(d) {
+    const h = Math.floor(d / 3600);
+    const m = Math.floor(d % 3600 / 60);
+    const s = Math.floor(d % 3600 % 60);
 
-        // if the length is already in the accumulator, we can just push to the array
-        if (titleLength in accumulator)
-        {
-            accumulator[titleLength].push(title);
-        }
-        // if the length is not in the accumulator, we need to make a new array for that property
-        else
-        {
-            accumulator[titleLength] = [ title ];
-        }
+    const hDisplay = h < 10 ? `0${h}` : h;
+    const mDisplay = m < 10 ? `0${m}` : m;
+    const sDisplay = s < 10 ? `0${s}` : s;
 
-        return accumulator;
-    }, {});
-
-    console.log("Playlists by # of Words in Title:");
-    console.log(titleLengths);
+    return `${hDisplay}:${mDisplay}:${sDisplay}`;
 }
 
 /**
@@ -186,4 +299,45 @@ function sum(data) {
  */
 function mean(data) {
     return sum(data) / data.length;
+}
+
+/**
+ * Create an HTML element and add it to the DOM tree.
+ * @param {HTMLElement} parent 
+ * @param {String} tag 
+ * @param {Object} attributes 
+ */
+function createElement(parent, tag, attributes = {}) {
+    // create the element to whatever tag was given
+    const el = document.createElement(tag);
+
+    // go through all the attributes in the object that was given
+    Object.entries(attributes)
+        .forEach(([attr, value]) => {
+            // handle the various special cases that will cause the Element to be malformed
+            if (attr == "innerText") {
+                el.innerText = value;
+            }
+            else if (attr == "innerHTML") {
+                el.innerHTML = value;
+            }
+            else if (attr == "textContent" || attr == "text") {
+                el.textContent = value;
+            }
+            else if (attr == "onclick") {
+                el.onclick = value;
+            }
+            else if (attr == "onkeydown") {
+                el.onkeydown = value;
+            }
+            else {
+                el.setAttribute(attr, value);
+            }
+        });
+
+    // add the newly created element to its parent
+    parent.appendChild(el);
+
+    // return the element in case this element is a parent for later element creation
+    return el;
 }

@@ -63,17 +63,14 @@ const spotifyApi = new SpotifyWebApi({
         console.log(`Server listening at http://localhost:${port}`)
     });
 
-    // const tunnel = await localtunnel({
-    //     port: port,
-    //     subdomain: "spotify-playlist-analyzer"
-    // });
-
     // if the user already has an access token
     if (config.ACCESS_TOKEN && config.REFRESH_TOKEN)
     {
         // if the access token is expired
         if (new Date().getTime() > config.EXPIRY)
         {
+            console.log("Refreshing token...");
+            
             // since we already have a refresh token, set that so that the API can use it for the call
             spotifyApi.setRefreshToken(config.REFRESH_TOKEN);
 
@@ -92,6 +89,12 @@ const spotifyApi = new SpotifyWebApi({
     // if the user needs to get an access token
     else
     {
+        // create a DNS tunnel to allow for this server to capture redirects
+        await localtunnel({
+            port: port,
+            subdomain: "spotify-playlist-analyzer"
+        });
+
         // the required scopes for the getPlaylists API call
         const scopes = [ "playlist-read-private", "playlist-read-collaborative" ];
 
