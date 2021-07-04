@@ -1,0 +1,16 @@
+{
+  "name": "spotify-playlist-analyzer",
+  "version": "1.0.0",
+  "description": "Get analytics about user-created playlists.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "Rees Draminski",
+  "license": "MIT",
+  "dependencies": {
+    "envfile": "^6.14.0",
+    "readline-sync": "^1.4.10",
+    "spotify-web-api-node": "^5.0.2"
+  }
+}
