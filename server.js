@@ -140,9 +140,10 @@ async function getData(userID) {
     }
 
     // for each playlist, get the tracks
+    const artistIDs = [];
     for (const playlist of playlists)
     {
-        console.log(`Downloading tracks for ${playlist.name}...`);
+        console.log(`Downloading playlist information for ${playlist.name}...`);
 
         // get the list of tracks for the playlist
         let tracksRequest = await spotifyApi.getPlaylistTracks(playlist.id, {
@@ -180,13 +181,35 @@ async function getData(userID) {
             i++;
         }
 
+        // get all unique artists from playlist
+        playlist.tracks.list.forEach(obj => {
+            obj.track.artists.forEach(x => {
+                if (!artistIDs.includes(x.id))
+                {
+                    artistIDs.push(x.id);
+                }
+            });
+        });
+
         // wait a little bit as not to spam the API
         await new Promise(r => setTimeout(r, 500));
     }
 
+    // download artist information
+    const artists = [];
+    for (let i = 0; i < artistIDs.length; i += 50)
+    {
+        const artistsRequest = await spotifyApi.getArtists(artistIDs.slice(i, i + 50));
+        artists.push(...artistsRequest.body.artists);
+    }
+
     console.log("Playlist data download complete!");
 
-    fs.writeFileSync(`data/${userID}.json`, JSON.stringify(playlists));
+    const data = {};
+    data.playlists = playlists;
+    data.artists = artists;
+
+    fs.writeFileSync(`data/${userID}.json`, JSON.stringify(data));
 }
 
 /**

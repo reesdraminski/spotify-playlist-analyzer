@@ -9,6 +9,11 @@ const ATTRIBUTES = [
         type: "string"
     },
     {
+        id: "createdBy",
+        name: "Created By",
+        type: "string"
+    },
+    {
         id: "trackCount",
         name: "Track Count",
         type: "number"
@@ -17,6 +22,21 @@ const ATTRIBUTES = [
         id: "duration",
         name: "Duration",
         type: "string"
+    },
+    {
+        id: "danceability",
+        name: "Average Danceability",
+        type: "number"
+    },
+    {
+        id: "energy",
+        name: "Average Energy",
+        type: "number"
+    },
+    {
+        id: "valence",
+        name: "Average Valence",
+        type: "number"
     }
 ];
 
@@ -29,6 +49,7 @@ const grid = new gridjs.Grid({
         limit: 50
     },
     resizable: true,
+    search: true,
     sort: true
 });
 
@@ -37,11 +58,13 @@ const grid = new gridjs.Grid({
  */
 (function initUI() {
     function search() {
+        cardContainerEl.innerHTML = "";
+        
         fetch(`/user/${userSearchInput.value}`)
             .then(response => response.json())
             .then(data => analyzeData(userSearchInput.value, data));
     }
-    
+
     // bind search action to search button click
     searchBtn.onclick = search;
 
@@ -92,7 +115,11 @@ function addCard(title, body) {
 /**
  * Analyze the user's playlist data.
  */
-async function analyzeData(userID, playlists) {
+async function analyzeData(userID, data) {
+    // there can be playlists with podcasts, we don't want those
+    const playlists = data.playlists.filter(playlist => playlist.tracks.list.every(obj => obj.track.type != "episode"));
+    const artists = data.artists;
+
     // get total number of playlists
     addCard("# of Public Playlists", playlists.length);
 
@@ -105,22 +132,17 @@ async function analyzeData(userID, playlists) {
     addCard("# of Followed Playlists", followed.length);
 
     // build a list of tracks, unique tracks, and unique artists
-    let trackCount = 0;
-    const tracks = [], uniqueTracks = [];
-    const artists = [];
+    const tracks = [], uniqueTracks = [], duplicates = [];
     playlists.forEach(playlist => {
         playlist.tracks.list.forEach(obj => {
             if (!uniqueTracks.find(x => x.id == obj.track.id)) 
             {
                 uniqueTracks.push(obj.track);
             }
-
-            obj.track.artists.forEach(x => {
-                if (!artists.includes(x.name))
-                {
-                    artists.push(x.name);
-                }
-            });
+            else
+            {
+                duplicates.push(obj.track);
+            }
 
             tracks.push(obj.track);
         });
@@ -129,6 +151,21 @@ async function analyzeData(userID, playlists) {
     addCard("# of Tracks", tracks.length);
     addCard("# of Unique Tracks", uniqueTracks.length);
     addCard("# of Artists", artists.length);
+
+    // get a list of all the unique genres represented by artists in the playlists
+    const genres = [];
+    artists.forEach(artist => {
+        if (!artist) return;
+
+        artist.genres.forEach(genre => {
+            if (!genres.includes(genre))
+            {
+                genres.push(genre);
+            }
+        })
+    });
+
+    addCard("# of Genres", genres.length);
 
     // get information about the titles
     const titleLengths = playlists
@@ -157,22 +194,40 @@ async function analyzeData(userID, playlists) {
     addCard("Average Playlist Duration", secondsToHms(mean(playlistDurations)));
 
     // structure data to be shown in the table view
-    const data = playlists.map(playlist => {
+    const tableData = playlists
+    .map(playlist => {
         const obj = {};
 
         // get the name and track count
         obj.name = playlist.name;
         obj.trackCount = playlist.tracks.total;
+        obj.createdBy = playlist.owner.display_name;
 
         // get the playlist duration in milliseconds
         const ms = playlist.tracks.list.reduce((a, b) => a + b.track.duration_ms, 0);
         obj.duration = secondsToHms(ms / 1000);
 
+        // get audio features of each track in the playlist
+        const trackFeatures = playlist.tracks.list.map(x => x.track.audio_features);
+
+        // average some key audio features (if is a playlist of podcasts or something audio features will be null)
+        if (trackFeatures.length && trackFeatures[0] != null)
+        {
+            const danceability = trackFeatures.map(x => x.danceability);
+            const energy = trackFeatures.map(x => x.energy);
+            const valence = trackFeatures.map(x => x.valence);
+
+            // set the mean of the audio features as a part of playlist object
+            obj.danceability = (mean(danceability) * 10).toFixed(2);
+            obj.energy = (mean(energy) * 10).toFixed(2);
+            obj.valence = (mean(valence) * 10).toFixed(2);
+        }
+
         return obj;
     });
 
     // render the table view with our newly created data
-    grid.updateConfig({ data: data });
+    grid.updateConfig({ data: tableData });
     grid.render(document.getElementById("wrapper"));
 
     return;
