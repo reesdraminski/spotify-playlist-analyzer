@@ -145,8 +145,40 @@ async function getData(userID) {
         console.log(`Downloading tracks for ${playlist.name}...`);
 
         // get the list of tracks for the playlist
-        const tracksRequest = await spotifyApi.getPlaylistTracks(playlist.id);
+        let tracksRequest = await spotifyApi.getPlaylistTracks(playlist.id, {
+            limit: 50
+        });
+
+        // get audio features for tracks
+        let trackIDs = tracksRequest.body.items.map(x => x.track.id);
+        let audioFeaturesRequest = await spotifyApi.getAudioFeaturesForTracks(trackIDs);
+        let features = audioFeaturesRequest.body.audio_features;
+        tracksRequest.body.items.forEach((x, i) => x.track.audio_features = features[i]);
+
+        // add the tracks to the tracks array
         playlist.tracks.list = tracksRequest.body.items;
+
+        // if the playlist has more than 50 tracks, get those too
+        let i = 1;
+        while (tracksRequest.body.next)
+        {
+            // get the next 50 songs from the playlist
+            tracksRequest = await spotifyApi.getPlaylistTracks(playlist.id, {
+                limit: 50,
+                offset: 50 * i
+            });
+
+            // get audio features for tracks
+            trackIDs = tracksRequest.body.items.map(x => x.track.id);
+            audioFeaturesRequest = await spotifyApi.getAudioFeaturesForTracks(trackIDs);
+            features = audioFeaturesRequest.body.audio_features;
+            tracksRequest.body.items.forEach((x, i) => x.track.audio_features = features[i]);
+
+            // add the tracks to the tracks array
+            playlist.tracks.list.push(...tracksRequest.body.items);
+
+            i++;
+        }
 
         // wait a little bit as not to spam the API
         await new Promise(r => setTimeout(r, 500));

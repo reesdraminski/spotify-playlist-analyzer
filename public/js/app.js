@@ -36,11 +36,22 @@ const grid = new gridjs.Grid({
  * Initialize the UI components of the app.
  */
 (function initUI() {
-    // bind search action to search button click
-    searchBtn.onclick = () => {
+    function search() {
         fetch(`/user/${userSearchInput.value}`)
             .then(response => response.json())
             .then(data => analyzeData(userSearchInput.value, data));
+    }
+    
+    // bind search action to search button click
+    searchBtn.onclick = search;
+
+    userSearchInput.onkeydown = e => {
+        if (e.code == "Enter")
+        {
+            userSearchInput.blur();
+
+            search();
+        }
     }
 })();
 
