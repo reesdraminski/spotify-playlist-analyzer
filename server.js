@@ -18,19 +18,24 @@ const config = parse(fs.readFileSync(".env"));
 const SpotifyWebApi = require("spotify-web-api-node");
 const spotifyApi = new SpotifyWebApi({
     clientId: config.CLIENT_ID,
-    clientSecret: config.CLIENT_SECRET,
-    redirectUri: config.REDIRECT_URI
+    clientSecret: config.CLIENT_SECRET
 });
+
+// app constants (only change these if there's an error)
+const PORT = 3000;
+const TUNNEL_REDIRECT_URI = "spotify-playlist-analyzer";
 
 /**
  * Start the express webserver.
  */
 (async function startServer() {
+    // create an express object
     const app = express();
-    const port = 3000;
-
+    
+    // mount the public/ folder as the static folder
     app.use(express.static(path.join(__dirname, "public")));
 
+    // process GET requests for /
     app.get("/", (req, res) => {
         if (req.query.code && !config.ACCESS_TOKEN)
         {
@@ -42,7 +47,8 @@ const spotifyApi = new SpotifyWebApi({
         res.sendFile("index.html");
     });
 
-    app.get("/user/:id", async (req, res) => {
+    // process GET requests for the search API endpoint
+    app.get("/search/:id", async (req, res) => {
         // get the path to the user file
         const dataPath = `data/${req.params.id}.json`;
 
@@ -59,8 +65,9 @@ const spotifyApi = new SpotifyWebApi({
         res.end(fs.readFileSync(dataPath));
     });
 
-    app.listen(port, () => {
-        console.log(`Server listening at http://localhost:${port}`)
+    // start the server listening
+    app.listen(PORT, () => {
+        console.log(`Server listening at http://localhost:${PORT}`);
     });
 
     // if the user already has an access token
@@ -90,10 +97,15 @@ const spotifyApi = new SpotifyWebApi({
     else
     {
         // create a DNS tunnel to allow for this server to capture redirects
-        await localtunnel({
-            port: port,
-            subdomain: "spotify-playlist-analyzer"
+        const tunnel = await localtunnel({
+            port: PORT,
+            subdomain: TUNNEL_REDIRECT_URI
         });
+
+        // set the redirect URI to the tunnel URL
+        spotifyApi.setRedirectURI(tunnel.url);
+
+        console.log(`Redirect URI set to ${tunnel.url}`);
 
         // the required scopes for the getPlaylists API call
         const scopes = [ "playlist-read-private", "playlist-read-collaborative" ];

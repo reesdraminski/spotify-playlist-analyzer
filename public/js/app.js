@@ -1,8 +1,11 @@
+// references to DOM elements
 const searchBtn = document.getElementById("searchBtn");
 const userSearchInput = document.getElementById("userSearch");
 const cardContainerEl = document.getElementById("card-container");
+const dataViewEl = document.getElementById("dataView");
 
-const ATTRIBUTES = [
+// column definitions for the playlists overview table
+const PLAYLIST_OVERVIEW_TABLE_ATTRIBUTES = [
     {
         id: "name",
         name: "Playlist Name",
@@ -40,8 +43,9 @@ const ATTRIBUTES = [
     }
 ];
 
-const grid = new gridjs.Grid({
-    columns: ATTRIBUTES,
+// initializing the Grid.js object for the playlists overview table
+const playlistsOverviewTable = new gridjs.Grid({
+    columns: PLAYLIST_OVERVIEW_TABLE_ATTRIBUTES,
     data: [{}],
     fixedHeader: true,
     pagination: {
@@ -57,10 +61,18 @@ const grid = new gridjs.Grid({
  * Initialize the UI components of the app.
  */
 (function initUI() {
+    /**
+     * Search for a user's playlists via the playlist retrieval API.
+     */
     function search() {
+        // clear cards
         cardContainerEl.innerHTML = "";
+
+        // show data view
+        dataViewEl.style.display = "";
         
-        fetch(`/user/${userSearchInput.value}`)
+        // get data from playlist retrieval API
+        fetch(`/search/${userSearchInput.value}`)
             .then(response => response.json())
             .then(data => analyzeData(userSearchInput.value, data));
     }
@@ -68,14 +80,28 @@ const grid = new gridjs.Grid({
     // bind search action to search button click
     searchBtn.onclick = search;
 
+    // bind key listener to search input
     userSearchInput.onkeydown = e => {
         if (e.code == "Enter")
         {
+            // de-focus search bar
             userSearchInput.blur();
 
             search();
         }
     }
+
+    // bind input listener to search input
+    userSearchInput.oninput = () => {
+        // if the input has been cleared
+        if (userSearchInput.value == "")
+        {
+            // hide data view
+            dataViewEl.style.display = "none";
+        }
+    }
+
+    playlistsOverviewTable.render(document.getElementById("playlistsTable"));
 })();
 
 /**
@@ -227,8 +253,7 @@ async function analyzeData(userID, data) {
     });
 
     // render the table view with our newly created data
-    grid.updateConfig({ data: tableData });
-    grid.render(document.getElementById("wrapper"));
+    playlistsOverviewTable.updateConfig({ data: tableData }).forceRender();
 
     return;
 
