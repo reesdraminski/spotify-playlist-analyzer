@@ -3,9 +3,10 @@ const searchBtn = document.getElementById("searchBtn");
 const userSearchInput = document.getElementById("userSearch");
 const cardContainerEl = document.getElementById("card-container");
 const dataViewEl = document.getElementById("dataView");
+const playlistSelectEl = document.getElementById("playlistSelect");
 
 // column definitions for the playlists overview table
-const PLAYLIST_OVERVIEW_TABLE_ATTRIBUTES = [
+const PLAYLISTS_OVERVIEW_TABLE_ATTRIBUTES = [
     {
         id: "name",
         name: "Playlist Name",
@@ -43,9 +44,62 @@ const PLAYLIST_OVERVIEW_TABLE_ATTRIBUTES = [
     }
 ];
 
+// column definitions for the playlist view table
+const PLAYLIST_VIEW_TABLE_ATTRIBUTES = [
+    {
+        id: "name",
+        name: "Name",
+        type: "string"
+    },
+    {
+        id: "artist",
+        name: "Artist",
+        type: "string"
+    },
+    {
+        id: "album",
+        name: "Album",
+        type: "string"
+    },
+    {
+        id: "duration",
+        name: "Duration",
+        type: "string"
+    },
+    {
+        id: "danceability",
+        name: "Danceability",
+        type: "number"
+    },
+    {
+        id: "energy",
+        name: "Energy",
+        type: "number"
+    },
+    {
+        id: "valence",
+        name: "Valence",
+        type: "number"
+    }
+];
+
 // initializing the Grid.js object for the playlists overview table
 const playlistsOverviewTable = new gridjs.Grid({
-    columns: PLAYLIST_OVERVIEW_TABLE_ATTRIBUTES,
+    columns: PLAYLISTS_OVERVIEW_TABLE_ATTRIBUTES,
+    data: [{}],
+    fixedHeader: true,
+    pagination: {
+        enabled: true,
+        limit: 50
+    },
+    resizable: true,
+    search: true,
+    sort: true
+});
+
+// initializing the Grid.js object for the playlist view table
+const playlistViewTable = new gridjs.Grid({
+    columns: PLAYLIST_VIEW_TABLE_ATTRIBUTES,
     data: [{}],
     fixedHeader: true,
     pagination: {
@@ -101,7 +155,8 @@ const playlistsOverviewTable = new gridjs.Grid({
         }
     }
 
-    playlistsOverviewTable.render(document.getElementById("playlistsTable"));
+    playlistsOverviewTable.render(document.getElementById("playlistsOverviewTable"));
+    playlistViewTable.render(document.getElementById("playlistViewTable"));
 })();
 
 /**
@@ -159,7 +214,10 @@ async function analyzeData(userID, data) {
 
     // build a list of tracks, unique tracks, and unique artists
     const tracks = [], uniqueTracks = [], duplicates = [];
+    const playlistNames = [];
     playlists.forEach(playlist => {
+        playlistNames.push(playlist.name);
+
         playlist.tracks.list.forEach(obj => {
             if (!uniqueTracks.find(x => x.id == obj.track.id)) 
             {
@@ -217,10 +275,10 @@ async function analyzeData(userID, data) {
         .filter(x => x.tracks.total > 0)
         .map(x => x.tracks.list.reduce((a, b) => a + b.track.duration_ms, 0) / 1000);
 
-    addCard("Average Playlist Duration", secondsToHms(mean(playlistDurations)));
+    addCard("Average Playlist Duration", getHHMMSSTimeString(mean(playlistDurations)));
 
     // structure data to be shown in the table view
-    const tableData = playlists
+    const playlistsOverview = playlists
     .map(playlist => {
         const obj = {};
 
@@ -231,7 +289,7 @@ async function analyzeData(userID, data) {
 
         // get the playlist duration in milliseconds
         const ms = playlist.tracks.list.reduce((a, b) => a + b.track.duration_ms, 0);
-        obj.duration = secondsToHms(ms / 1000);
+        obj.duration = getHHMMSSTimeString(ms / 1000);
 
         // get audio features of each track in the playlist
         const trackFeatures = playlist.tracks.list.map(x => x.track.audio_features);
@@ -252,8 +310,28 @@ async function analyzeData(userID, data) {
         return obj;
     });
 
-    // render the table view with our newly created data
-    playlistsOverviewTable.updateConfig({ data: tableData }).forceRender();
+    // render the playlists overview table with our newly created data
+    playlistsOverviewTable.updateConfig({ data: playlistsOverview }).forceRender();
+
+    // create a select option for each of the playlists
+    playlistNames.forEach(x => {
+        const option = document.createElement("option");
+        option.value = x;
+        option.text = x;
+
+        playlistSelectEl.add(option);
+    });
+
+    // add change listener to the playlist selection element
+    playlistSelectEl.onchange = e => {
+        // get playlist
+        const playlist = playlists.find(x => x.name == e.target.value);
+
+        playlistViewTable.updateConfig({ data: formatPlaylist(playlist) }).forceRender();
+    }
+
+    // render the playlist view table with the first platylist in the list 
+    playlistViewTable.updateConfig({ data: formatPlaylist(playlists[0]) }).forceRender();
 
     return;
 
@@ -276,11 +354,48 @@ async function analyzeData(userID, data) {
 }
 
 /**
+ * Format a playlist into the playlist view table format.
+ * @param {object} playlist 
+ * @returns {object[]} formattedPlaylist
+ */
+function formatPlaylist(playlist) {
+    return playlist.tracks.list.map(x => {
+        const track = x.track;
+        const obj = {};
+
+        obj.name = track.name;
+        obj.artist = track.artists.map(x => x.name).join(", ");
+        obj.album = track.album.name;
+        obj.duration = getMMSSTimeString(track.duration_ms / 1000);
+        obj.danceability = (track.audio_features.danceability * 10).toFixed(2);
+        obj.energy = (track.audio_features.energy * 10).toFixed(2);
+        obj.valence = (track.audio_features.valence * 10).toFixed(2);
+
+        return obj;
+    });
+}
+
+/**
+ * Convert seconds into a MM:SS string.
+ * @param {number} d 
+ * @returns {string} hmsString
+ */
+function getMMSSTimeString(d) {
+    const m = Math.floor(d / 60);
+    const s = Math.floor(d % 60 % 60);
+
+    const mDisplay = m < 10 ? `0${m}` : m;
+    const sDisplay = s < 10 ? `0${s}` : s;
+
+    return `${mDisplay}:${sDisplay}`;
+}
+
+/**
  * Convert seconds into a HH:MM:SS string.
  * @param {number} d 
  * @returns {string} hmsString
  */
-function secondsToHms(d) {
+function getHHMMSSTimeString(d) {
     const h = Math.floor(d / 3600);
     const m = Math.floor(d % 3600 / 60);
     const s = Math.floor(d % 3600 % 60);

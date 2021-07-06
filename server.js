@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 
-// webserver module
+// web server module for running our search API
 const express = require("express");
 
 // dns tunneling module to allow for connections outside of localhost
