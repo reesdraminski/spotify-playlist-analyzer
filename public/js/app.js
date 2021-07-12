@@ -18,6 +18,11 @@ const PLAYLISTS_OVERVIEW_TABLE_ATTRIBUTES = [
         type: "string"
     },
     {
+        id: "createdAt",
+        name: "Created At",
+        type: "string"
+    },
+    {
         id: "trackCount",
         name: "Track Count",
         type: "number"
@@ -29,17 +34,17 @@ const PLAYLISTS_OVERVIEW_TABLE_ATTRIBUTES = [
     },
     {
         id: "danceability",
-        name: "Average Danceability",
+        name: "Danceability",
         type: "number"
     },
     {
         id: "energy",
-        name: "Average Energy",
+        name: "Energy",
         type: "number"
     },
     {
         id: "valence",
-        name: "Average Valence",
+        name: "Valence",
         type: "number"
     }
 ];
@@ -218,23 +223,29 @@ async function analyzeData(userID, data) {
     playlists.forEach(playlist => {
         playlistNames.push(playlist.name);
 
-        playlist.tracks.list.forEach(obj => {
-            if (!uniqueTracks.find(x => x.id == obj.track.id)) 
-            {
-                uniqueTracks.push(obj.track);
-            }
-            else
-            {
-                duplicates.push(obj.track);
-            }
+        if (playlist.tracks.list.length)
+        {
+            playlist.tracks.list.forEach(obj => {
+                if (!uniqueTracks.find(x => x.id == obj.track.id)) 
+                {
+                    uniqueTracks.push(obj.track);
+                }
+                else
+                {
+                    duplicates.push(obj.track);
+                }
 
-            tracks.push(obj.track);
-        });
+                tracks.push(obj.track);
+            });
+
+            const firstAddedTrack = playlist.tracks.list.sort((a, b) => new Date(a.added_at).getTime() - new Date(b.added_at).getTime())[0];
+            playlist.createdAt = firstAddedTrack.added_at;
+        }
     });
 
     addCard("# of Tracks", tracks.length);
     addCard("# of Unique Tracks", uniqueTracks.length);
-    addCard("# of Artists", artists.length);
+    addCard("# of Artists", artists?.length);
 
     // get a list of all the unique genres represented by artists in the playlists
     const genres = [];
@@ -286,6 +297,7 @@ async function analyzeData(userID, data) {
         obj.name = playlist.name;
         obj.trackCount = playlist.tracks.total;
         obj.createdBy = playlist.owner.display_name;
+        obj.createdAt = getDateTimeString(new Date(playlist.createdAt));
 
         // get the playlist duration in milliseconds
         const ms = playlist.tracks.list.reduce((a, b) => a + b.track.duration_ms, 0);
@@ -297,9 +309,9 @@ async function analyzeData(userID, data) {
         // average some key audio features (if is a playlist of podcasts or something audio features will be null)
         if (trackFeatures.length && trackFeatures[0] != null)
         {
-            const danceability = trackFeatures.map(x => x.danceability);
-            const energy = trackFeatures.map(x => x.energy);
-            const valence = trackFeatures.map(x => x.valence);
+            const danceability = trackFeatures.map(x => x ? x.danceability : 0);
+            const energy = trackFeatures.map(x => x ? x.energy : 0);
+            const valence = trackFeatures.map(x => x ? x.valence : 0);
 
             // set the mean of the audio features as a part of playlist object
             obj.danceability = (mean(danceability) * 10).toFixed(2);
@@ -351,6 +363,23 @@ async function analyzeData(userID, data) {
     
     console.log("Playlists by # of Tracks");
     console.log(trackCountBreakdown);
+}
+
+/**
+ * Get a string in format M:D:YY H:MMA
+ * @param {Date} date 
+ * @returns {string} dateTimeString
+ */
+function getDateTimeString(date) {
+    const h = date.getHours();
+    const hDisplay = h > 12 ? h - 12 : h;
+
+    const m = date.getMinutes();
+    const mDisplay = m < 10 ? `0${m}` : m;
+
+    const amPm = h > 12 ? "pm" : "am";
+
+    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear().toString().slice(2)} @ ${hDisplay}:${mDisplay}${amPm}`;
 }
 
 /**

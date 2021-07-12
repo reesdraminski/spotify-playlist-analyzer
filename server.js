@@ -124,7 +124,9 @@ const TUNNEL_REDIRECT_URI = "spotify-playlist-analyzer";
  * Get ALL of the user's public playlists and write it to a file for persistent storage.
  */
 async function getData(userID) {
-    console.log("Beginning playlist fetch...");
+    console.log("Getting list of all playlists...");
+
+    const data = {};
 
     // get the first 50 playlists (if the user has that many)
     let playlistRequest = await spotifyApi.getUserPlaylists(userID, {
@@ -132,7 +134,8 @@ async function getData(userID) {
     });
 
     // create an array with all the playlists
-    const playlists = playlistRequest.body.items;
+    // filter out spotify stuff because they could get mad that we're scraping their playlists (see: SongShift)
+    data.playlists = playlistRequest.body.items.filter(x => x.owner.display_name != "Spotify");
 
     // while the user still has more playlists to go, get those too
     let i = 1;
@@ -145,22 +148,36 @@ async function getData(userID) {
         });
 
         // add the playlists to the array
-        playlists.push(...playlistRequest.body.items);
+        data.playlists.push(...playlistRequest.body.items);
         
         // increment counter for the offset
         i++;
+
+        // save progress
+        fs.writeFileSync(`data/${userID}.json`, JSON.stringify(data));
+
+        // wait a little bit as not to spam the API
+        await new Promise(r => setTimeout(r, 500));
     }
+
+    console.log("Got list of all playlists!");
+
+    // wait a little bit as not to spam the API
+    await new Promise(r => setTimeout(r, 4000));
 
     // for each playlist, get the tracks
     const artistIDs = [];
-    for (const playlist of playlists)
+    for (const playlist of data.playlists)
     {
-        console.log(`Downloading playlist information for ${playlist.name}...`);
+        console.log(`Downloading tracks information for ${playlist.name}...`);
 
         // get the list of tracks for the playlist
         let tracksRequest = await spotifyApi.getPlaylistTracks(playlist.id, {
             limit: 50
         });
+
+        // wait a little bit as not to spam the API
+        await new Promise(r => setTimeout(r, 500));
 
         // get audio features for tracks
         let trackIDs = tracksRequest.body.items.map(x => x.track.id);
@@ -181,6 +198,9 @@ async function getData(userID) {
                 offset: 50 * i
             });
 
+            // wait a little bit as not to spam the API
+            await new Promise(r => setTimeout(r, 500));
+
             // get audio features for tracks
             trackIDs = tracksRequest.body.items.map(x => x.track.id);
             audioFeaturesRequest = await spotifyApi.getAudioFeaturesForTracks(trackIDs);
@@ -191,6 +211,12 @@ async function getData(userID) {
             playlist.tracks.list.push(...tracksRequest.body.items);
 
             i++;
+
+            // save progress
+            fs.writeFileSync(`data/${userID}.json`, JSON.stringify(data));
+
+            // wait a little bit as not to spam the API
+            await new Promise(r => setTimeout(r, 500));
         }
 
         // get all unique artists from playlist
@@ -203,23 +229,33 @@ async function getData(userID) {
             });
         });
 
+        // save progress
+        fs.writeFileSync(`data/${userID}.json`, JSON.stringify(data));
+
+        // wait a little bit as not to spam the API
+        await new Promise(r => setTimeout(r, 2000));
+    }
+
+    console.log("Getting artists information...");
+
+    // wait a little bit as not to spam the API
+    await new Promise(r => setTimeout(r, 4000));
+
+    // download artist information
+    data.artists = [];
+    for (let i = 0; i < artistIDs.length; i += 50)
+    {
+        const artistsRequest = await spotifyApi.getArtists(artistIDs.slice(i, i + 50));
+        data.artists.push(...artistsRequest.body.artists);
+
+        // save progress
+        fs.writeFileSync(`data/${userID}.json`, JSON.stringify(data));
+
         // wait a little bit as not to spam the API
         await new Promise(r => setTimeout(r, 500));
     }
 
-    // download artist information
-    const artists = [];
-    for (let i = 0; i < artistIDs.length; i += 50)
-    {
-        const artistsRequest = await spotifyApi.getArtists(artistIDs.slice(i, i + 50));
-        artists.push(...artistsRequest.body.artists);
-    }
-
     console.log("Playlist data download complete!");
-
-    const data = {};
-    data.playlists = playlists;
-    data.artists = artists;
 
     fs.writeFileSync(`data/${userID}.json`, JSON.stringify(data));
 }
